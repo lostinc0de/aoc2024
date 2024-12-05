@@ -114,6 +114,212 @@ fn two(filename: &String) {
     );
 }
 
+fn three(filename: &String) {
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    let lines = reader.lines().map(|l| l.unwrap()).collect::<Vec<String>>();
+    // Part one: Add up valid mul() instructions
+    // This lambda evaluates the mul() instruction at a given position
+    let mul = move |pos: usize, line: &String| -> u64 {
+        let start = pos + 4;
+        let comma = match line[start..].find(",") {
+            Some(pos_comma) => start + pos_comma,
+            None => {
+                return 0u64;
+            }
+        };
+        let end = match line[start..].find(")") {
+            Some(pos_end) => start + pos_end,
+            None => {
+                return 0u64;
+            }
+        };
+        if start < comma && comma < end {
+            let mul0 = u64::from_str(&line[start..comma]).unwrap_or(0u64);
+            let mul1 = u64::from_str(&line[comma + 1..end]).unwrap_or(0u64);
+            return mul0 * mul1;
+        }
+        return 0u64;
+    };
+    let mut sum = 0u64;
+    for line in lines.iter() {
+        for (pos, _) in line.match_indices("mul(") {
+            sum += mul(pos, &line);
+        }
+    }
+    println!("Sum of mul() instructions = {}", sum);
+    // Part two: Only mul() in the do() sections count
+    sum = 0;
+    let line = lines
+        .iter()
+        .map(|s| s.chars())
+        .flatten()
+        .collect::<String>();
+    let pos_do = line
+        .match_indices("do()")
+        .map(|(pos, _)| pos)
+        .collect::<Vec<usize>>();
+    let pos_dont = line
+        .match_indices("don't()")
+        .map(|(pos, _)| pos)
+        .collect::<Vec<usize>>();
+    // Lambda to check if we are in an enabled region
+    let check_pos = move |pos_test: usize| -> bool {
+        let p_do = pos_do
+            .iter()
+            .filter(|p| **p < pos_test)
+            .max()
+            .cloned()
+            .unwrap_or(0);
+        let p_dont = pos_dont
+            .iter()
+            .filter(|p| **p < pos_test)
+            .max()
+            .cloned()
+            .unwrap_or(0);
+        // If the nearest position of do() is smaller than the position of dont()
+        // the region is invalid and mul() instructions dont count
+        if p_do < p_dont {
+            return false;
+        }
+        true
+    };
+    for (pos, _) in line.match_indices("mul(") {
+        if check_pos(pos) {
+            sum += mul(pos, &line);
+        }
+    }
+    println!("Sum of mul() instructions in do() regions = {}", sum);
+}
+
+fn four(filename: &String) {
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    // Part one: Contruct a matrix of characters
+    let mat = reader
+        .lines()
+        .map(|l| l.unwrap().chars().collect::<Vec<char>>())
+        .collect::<Vec<Vec<char>>>();
+    // Lambda for determining the next position in a specific direction
+    let next_pos =
+        move |i: usize, j: usize, dir: usize, mat: &Vec<Vec<char>>| -> Option<(usize, usize)> {
+            if i >= mat.len() || j >= mat[i].len() {
+                return None;
+            }
+            // Convert to isize for comparing values smaller than zero
+            let (i_loc, j_loc) = (i as isize, j as isize);
+            let pos_new = match dir {
+                0 => Some((i_loc + 1, j_loc)),
+                1 => Some((i_loc, j_loc - 1)),
+                2 => Some((i_loc - 1, j_loc)),
+                3 => Some((i_loc, j_loc + 1)),
+                4 => Some((i_loc + 1, j_loc + 1)),
+                5 => Some((i_loc + 1, j_loc - 1)),
+                6 => Some((i_loc - 1, j_loc - 1)),
+                7 => Some((i_loc - 1, j_loc + 1)),
+                _ => None,
+            };
+            // Check the new position against boundaries
+            match pos_new {
+                Some((ii, jj)) => {
+                    if ii < 0 || jj < 0 {
+                        return None;
+                    }
+                    let (i_new, j_new) = (ii as usize, jj as usize);
+                    if i_new >= mat.len() || j_new >= mat[ii as usize].len() {
+                        return None;
+                    }
+                    Some((i_new, j_new))
+                }
+                _ => None,
+            }
+        };
+    // Lambda that returns the number of XMAS combinations found at (i, j)
+    let find_xmas = move |i: usize, j: usize, mat: &Vec<Vec<char>>| -> u64 {
+        const N_DIRS: usize = 8;
+        const SEARCH_STR: &str = "XMAS";
+        if mat[i][j] != 'X' {
+            return 0u64;
+        }
+        let mut sum = 0u64;
+        for d in 0..N_DIRS {
+            let (mut i_next, mut j_next) = (i, j);
+            for (ind, c) in SEARCH_STR.chars().enumerate() {
+                if mat[i_next][j_next] == c {
+                    // If this is the last char, we found XMAS
+                    if ind == SEARCH_STR.len() - 1 {
+                        sum += 1;
+                    } else {
+                        match next_pos(i_next, j_next, d, &mat) {
+                            Some((i_n, j_n)) => {
+                                i_next = i_n;
+                                j_next = j_n;
+                            }
+                            None => {
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+        sum
+    };
+    let n_rows = mat.len();
+    let mut sum = 0u64;
+    for i in 0..n_rows {
+        let n_cols = mat[i].len();
+        for j in 0..n_cols {
+            sum += find_xmas(i, j, &mat);
+        }
+    }
+    println!("XMAS occurrences sum = {}", sum);
+    // Part two: Find two MAS forming an X
+    let find_x_mas = move |i: usize, j: usize, mat: &Vec<Vec<char>>| -> bool {
+        // We search for the A in the middle
+        if mat[i][j] != 'A' {
+            return false;
+        }
+        // We only need the diagonal directions
+        let dirs = [4, 6, 5, 7];
+        let mut test = [' '; 4];
+        for d in 0..dirs.len() {
+            let dir = dirs[d];
+            match next_pos(i, j, dir, &mat) {
+                Some((i_n, j_n)) => {
+                    let c = mat[i_n][j_n];
+                    if c == 'M' || c == 'S' {
+                        test[d] = c;
+                    } else {
+                        return false;
+                    }
+                }
+                None => {
+                    return false;
+                }
+            }
+        }
+        if ((test[0] == 'M' && test[1] == 'S') || (test[0] == 'S' && test[1] == 'M'))
+            && ((test[2] == 'M' && test[3] == 'S') || (test[2] == 'S' && test[3] == 'M'))
+        {
+            return true;
+        }
+        false
+    };
+    sum = 0u64;
+    for i in 0..n_rows {
+        let n_cols = mat[i].len();
+        for j in 0..n_cols {
+            if find_x_mas(i, j, &mat) {
+                sum += 1;
+            }
+        }
+    }
+    println!("X-MAS occurrences sum = {}", sum);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -126,7 +332,15 @@ fn main() {
             2 => {
                 two(&args[2]);
             }
+            3 => {
+                three(&args[2]);
+            }
+            4 => {
+                four(&args[2]);
+            }
             _ => println!("Unknown day {}", day),
         }
+    } else {
+        println!("At least two arguments required");
     }
 }
