@@ -320,6 +320,107 @@ fn four(filename: &String) {
     println!("X-MAS occurrences sum = {}", sum);
 }
 
+fn five(filename: &String) {
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    // Part one: Parse the rules and lines to check
+    let mut rules = vec![];
+    let mut lines_pages = vec![];
+    for line in reader.lines().map(|l| l.unwrap()) {
+        if line.contains("|") {
+            let rule = line
+                .split("|")
+                .map(|s| u64::from_str(s).unwrap())
+                .collect::<Vec<u64>>();
+            if rule.len() == 2 {
+                rules.push((rule[0], rule[1]));
+            }
+        } else if line.contains(",") {
+            let page_numbers = line
+                .split(",")
+                .map(|s| u64::from_str(s).unwrap())
+                .collect::<Vec<u64>>();
+            if page_numbers.len() > 0 {
+                lines_pages.push(page_numbers);
+            }
+        }
+    }
+    // Returns the mid page number or 0, if the line is invalid
+    let check_line = move |line: &Vec<u64>, rules: &Vec<(u64, u64)>| -> u64 {
+        for (pos, page_number) in line.iter().enumerate() {
+            // Find every rule for this number
+            for (_, page_after) in rules.iter().filter(|(num, _)| num == page_number) {
+                // Check if the page, which should come after the current
+                // page number, is present before
+                match line[0..pos].iter().find(|&page| page == page_after) {
+                    Some(_) => return 0u64,
+                    None => {}
+                }
+            }
+        }
+        let mid = line.len() / 2;
+        line[mid]
+    };
+    let mut sum = 0u64;
+    for line in lines_pages.iter() {
+        sum += check_line(line, &rules);
+    }
+    println!("Sum of mid pages = {}", sum);
+    // Part two: Correct the invalid lines
+    let correct_invalid = move |line: &Vec<u64>, rules: &Vec<(u64, u64)>| -> u64 {
+        let mut line_corr = line.clone();
+        let mut valid = true;
+        // Save the positions we need to swap
+        let mut swap_pos = None;
+        loop {
+            for (pos, page_number) in line_corr.iter().enumerate() {
+                // Find every rule for this number
+                for (_, page_after) in rules.iter().filter(|(num, _)| num == page_number) {
+                    // Check if the page, which should come after the current
+                    // page number, is present before
+                    match line_corr[0..pos]
+                        .iter()
+                        .enumerate()
+                        .find(|(_, page)| *page == page_after)
+                    {
+                        Some((pos_invalid, _)) => {
+                            swap_pos = Some((pos, pos_invalid));
+                            break;
+                        }
+                        None => {}
+                    }
+                }
+                match swap_pos {
+                    Some((_, _)) => {
+                        break;
+                    }
+                    None => {}
+                }
+            }
+            match swap_pos {
+                Some((pos, pos_invalid)) => {
+                    valid = false;
+                    line_corr.as_mut_slice().swap(pos, pos_invalid);
+                    swap_pos = None;
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+        if !valid {
+            let mid = line_corr.len() / 2;
+            return line_corr[mid];
+        }
+        0u64
+    };
+    sum = 0u64;
+    for line in lines_pages.iter() {
+        sum += correct_invalid(line, &rules);
+    }
+    println!("Sum of mid pages corrected lines = {}", sum);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -337,6 +438,9 @@ fn main() {
             }
             4 => {
                 four(&args[2]);
+            }
+            5 => {
+                five(&args[2]);
             }
             _ => println!("Unknown day {}", day),
         }
