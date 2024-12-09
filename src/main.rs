@@ -421,26 +421,231 @@ fn five(filename: &String) {
     println!("Sum of mid pages corrected lines = {}", sum);
 }
 
+fn six(filename: &String) {
+    #[derive(Debug, Copy, Clone, PartialEq)]
+    enum Dir {
+        Left,
+        Right,
+        Up,
+        Down,
+    }
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    let mut map = vec![];
+    let mut pos_start = (0usize, 0usize);
+    let mut dir_start = Dir::Up;
+    // Part one: Parse the map and find out the initial direction and position
+    for (row, line) in reader.lines().map(|l| l.unwrap()).enumerate() {
+        map.push(vec![]);
+        for (col, c) in line.chars().enumerate() {
+            let field = match c {
+                '.' => Some(c),
+                '#' => Some(c),
+                '^' => {
+                    pos_start = (row, col);
+                    dir_start = Dir::Up;
+                    Some('.')
+                }
+                'v' => {
+                    pos_start = (row, col);
+                    dir_start = Dir::Down;
+                    Some('.')
+                }
+                '<' => {
+                    pos_start = (row, col);
+                    dir_start = Dir::Left;
+                    Some('.')
+                }
+                '>' => {
+                    pos_start = (row, col);
+                    dir_start = Dir::Right;
+                    Some('.')
+                }
+                _ => None,
+            };
+            match field {
+                Some(f) => {
+                    map[row].push(f);
+                }
+                None => {}
+            }
+        }
+    }
+    // Lambda for determining the next direction after turning right
+    let next_dir = move |dir: Dir| -> Dir {
+        match dir {
+            Dir::Up => Dir::Right,
+            Dir::Right => Dir::Down,
+            Dir::Down => Dir::Left,
+            Dir::Left => Dir::Up,
+        }
+    };
+    // Lambda which finds the next position before an obstacle
+    let next_pos =
+        move |pos: (usize, usize), dir: Dir, map: &Vec<Vec<char>>| -> Option<(usize, usize)> {
+            let (row, col) = pos;
+            match dir {
+                Dir::Up => {
+                    if row > 0 {
+                        Some((row - 1, col))
+                    } else {
+                        None
+                    }
+                }
+                Dir::Down => {
+                    if row < (map.len() - 1) {
+                        Some((row + 1, col))
+                    } else {
+                        None
+                    }
+                }
+                Dir::Left => {
+                    if col > 0 {
+                        Some((row, col - 1))
+                    } else {
+                        None
+                    }
+                }
+                Dir::Right => {
+                    if col < (map[row].len() - 1) {
+                        Some((row, col + 1))
+                    } else {
+                        None
+                    }
+                }
+            }
+        };
+    // Lambda for checking if there is an obstacle in front
+    let check_obstacle_before =
+        move |pos: (usize, usize), dir: Dir, map: &Vec<Vec<char>>| -> bool {
+            match next_pos(pos, dir, map) {
+                Some((row, col)) => {
+                    if map[row][col] == '#' {
+                        return true;
+                    }
+                    false
+                }
+                _ => false,
+            }
+        };
+    // Lambda for counting positions on the map marked with X
+    let count_fields = move |map: &Vec<Vec<char>>| -> u64 {
+        let mut sum = 0u64;
+        for r in map.iter() {
+            for c in r.iter() {
+                if *c == 'X' {
+                    sum += 1;
+                }
+            }
+        }
+        sum
+    };
+    let mut pos = pos_start;
+    let mut dir = dir_start;
+    loop {
+        if check_obstacle_before(pos, dir, &map) {
+            dir = next_dir(dir);
+        }
+        let (row, col) = pos;
+        map[row][col] = 'X';
+        match next_pos(pos, dir, &map) {
+            Some(pos_next) => {
+                pos = pos_next;
+            }
+            None => {
+                let sum = count_fields(&map);
+                println!("Number of field passed = {}", sum);
+                break;
+            }
+        }
+    }
+    // Part two: Count number of possible positions for looping the guard
+    let reset_fields = move |map: &mut Vec<Vec<char>>| {
+        for r in map.iter_mut() {
+            for c in r.iter_mut() {
+                if *c == 'X' {
+                    *c = '.';
+                }
+            }
+        }
+    };
+    // Store the positions of the path
+    let path = {
+        let mut ret = vec![];
+        for (row, _) in map.iter().enumerate() {
+            for (col, c) in map[row].iter().enumerate() {
+                // Don't place an obstacle at the starting position
+                let pos_path = (row, col);
+                if *c == 'X' && pos != pos_start {
+                    ret.push((row, col));
+                }
+            }
+        }
+        ret
+    };
+    let mut sum = 0u64;
+    reset_fields(&mut map);
+    let max_steps = map.len() * map[0].len();
+    for &pos_new_obstacle in path.iter() {
+        // Mark the new obstacle on the map
+        let (row_new_obst, col_new_obst) = pos_new_obstacle;
+        map[row_new_obst][col_new_obst] = '#';
+        pos = pos_start;
+        dir = dir_start;
+        let mut n_steps = 0usize;
+        loop {
+            // Check if the patrol got stuck in a loop
+            if n_steps > max_steps {
+                //println!("Loop at {:?}", pos_new_obstacle);
+                sum += 1;
+                map[row_new_obst][col_new_obst] = '.';
+                break;
+            }
+            if check_obstacle_before(pos, dir, &map) {
+                //println!("Change dir");
+                dir = next_dir(dir);
+            }
+            match next_pos(pos, dir, &map) {
+                Some(pos_next) => {
+            //println!("pos {:?} pos next {:?} dir {:?}", pos, pos_next, dir);
+                    pos = pos_next;
+                    n_steps += 1;
+                }
+                None => {
+                    //println!("break");
+                    map[row_new_obst][col_new_obst] = '.';
+                    break;
+                }
+            }
+        }
+    }
+    println!("Number of possible loops = {}", sum);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
         let arg = args[1].as_str();
         let day = u64::from_str(arg).unwrap();
+        let filename = &args[2];
         match day {
             1 => {
-                one(&args[2]);
+                one(filename);
             }
             2 => {
-                two(&args[2]);
+                two(filename);
             }
             3 => {
-                three(&args[2]);
+                three(filename);
             }
             4 => {
-                four(&args[2]);
+                four(filename);
             }
             5 => {
-                five(&args[2]);
+                five(filename);
+            }
+            6 => {
+                six(filename);
             }
             _ => println!("Unknown day {}", day),
         }
