@@ -487,31 +487,27 @@ fn six(filename: &String) {
             match dir {
                 Dir::Up => {
                     if row > 0 {
-                        Some((row - 1, col))
-                    } else {
-                        None
+                        return Some((row - 1, col));
                     }
+                    None
                 }
                 Dir::Down => {
                     if row < (map.len() - 1) {
-                        Some((row + 1, col))
-                    } else {
-                        None
+                        return Some((row + 1, col));
                     }
+                    None
                 }
                 Dir::Left => {
                     if col > 0 {
-                        Some((row, col - 1))
-                    } else {
-                        None
+                        return Some((row, col - 1));
                     }
+                    None
                 }
                 Dir::Right => {
                     if col < (map[row].len() - 1) {
-                        Some((row, col + 1))
-                    } else {
-                        None
+                        return Some((row, col + 1));
                     }
+                    None
                 }
             }
         };
@@ -554,7 +550,7 @@ fn six(filename: &String) {
             }
             None => {
                 let sum = count_fields(&map);
-                println!("Number of field passed = {}", sum);
+                println!("Number of fields passed = {}", sum);
                 break;
             }
         }
@@ -572,11 +568,11 @@ fn six(filename: &String) {
     // Store the positions of the path
     let path = {
         let mut ret = vec![];
-        for (row, _) in map.iter().enumerate() {
-            for (col, c) in map[row].iter().enumerate() {
+        for (row, r) in map.iter().enumerate() {
+            for (col, c) in r.iter().enumerate() {
                 // Don't place an obstacle at the starting position
                 let pos_path = (row, col);
-                if *c == 'X' && pos != pos_start {
+                if *c == 'X' && pos_path != pos_start {
                     ret.push((row, col));
                 }
             }
@@ -585,7 +581,7 @@ fn six(filename: &String) {
     };
     let mut sum = 0u64;
     reset_fields(&mut map);
-    let max_steps = map.len() * map[0].len();
+    let max_steps = map.len() * map[0].len() * 4;
     for &pos_new_obstacle in path.iter() {
         // Mark the new obstacle on the map
         let (row_new_obst, col_new_obst) = pos_new_obstacle;
@@ -596,23 +592,22 @@ fn six(filename: &String) {
         loop {
             // Check if the patrol got stuck in a loop
             if n_steps > max_steps {
-                //println!("Loop at {:?}", pos_new_obstacle);
                 sum += 1;
                 map[row_new_obst][col_new_obst] = '.';
                 break;
             }
-            if check_obstacle_before(pos, dir, &map) {
-                //println!("Change dir");
+            // Turn until way is not blocked by an obstacle anymore
+            let mut n_turns = 0;
+            while check_obstacle_before(pos, dir, &map) && n_turns < 4 {
                 dir = next_dir(dir);
+                n_turns += 1;
             }
             match next_pos(pos, dir, &map) {
                 Some(pos_next) => {
-            //println!("pos {:?} pos next {:?} dir {:?}", pos, pos_next, dir);
                     pos = pos_next;
                     n_steps += 1;
                 }
                 None => {
-                    //println!("break");
                     map[row_new_obst][col_new_obst] = '.';
                     break;
                 }
