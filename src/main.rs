@@ -638,53 +638,54 @@ fn seven(filename: &String) {
         Mul,
         Concat,
     }
+    impl Op {
+        // Translates a byte into an enum
+        pub fn from_u8(ind: u8) -> Self {
+            match ind {
+                0 => Op::Add,
+                1 => Op::Mul,
+                2 => Op::Concat,
+                _ => Op::Add
+            }
+        }
+    }
     // Lambda for evaluating an equation
-    let eval = move |numbers: &Vec<u64>, ops: &Vec<Op>| -> u64 {
+    let eval = move |numbers: &Vec<u64>, counters: &Vec<u8>| -> u64 {
         let mut ret = numbers[0];
-        for (ind, op) in ops.iter().enumerate() {
-            match op {
+        for (ind, &c) in counters.iter().enumerate() {
+            match Op::from_u8(c) {
                 Op::Add => { ret += numbers[ind + 1]; },
                 Op::Mul => { ret *= numbers[ind + 1]; },
                 // Added for part two
                 Op::Concat => { 
-                    let ret_str = ret.to_string();
                     let num_str = numbers[ind + 1].to_string();
-                    let concat = format!("{}{}", ret_str, num_str);
-                    ret = u64::from_str(&concat).unwrap();
+                    let ret_str = ret.to_string() + &num_str;
+                    ret = u64::from_str(&ret_str).unwrap();
                 }
             }
         }
         ret
     };
     // Lambda for validating an equation with any combination of operators
-    let check_eq = move |res: u64, numbers: &Vec<u64>| -> bool {
+    let check_eq = move |res: u64, numbers: &Vec<u64>, n_ops: u8| -> bool {
         if numbers.len() == 0 {
             return false;
         }
         if numbers.len() == 1 {
             return res == numbers[0];
         }
-        let mut ops = vec![Op::Add; numbers.len() - 1];
         // Iterate through all possible combinations
-        let mut counters = vec![0u64; ops.len()];
-        const N_OPS: u64 = 2;
-        while counters[counters.len() - 1] < N_OPS {
-            if eval(&numbers, &ops) == res {
+        let mut counters = vec![0u8; numbers.len() - 1];
+        while counters[counters.len() - 1] < n_ops {
+            if eval(&numbers, &counters) == res {
                 return true;
             }
             counters[0] += 1;
             for c in 0..(counters.len() - 1) {
-                if counters[c] >= N_OPS {
+                if counters[c] >= n_ops {
                     counters[c] = 0;
                     counters[c + 1] += 1;
                 }
-            }
-            for (ind, &n) in counters.iter().enumerate() {
-                ops[ind] = match n {
-                    0 => Op::Add,
-                    1 => Op::Mul,
-                    _ => Op::Add,
-                };
             }
         }
         false
@@ -692,50 +693,16 @@ fn seven(filename: &String) {
     // Compute the sum of all valid equation results
     let mut sum = 0u64;
     for (res, numbers) in eqs.iter() {
-        if check_eq(*res, numbers) {
+        if check_eq(*res, numbers, 2) {
             sum += res;
         }
     }
     println!("Sum of valid equations results = {:?}", sum);
     // Part two: Concatenation operator
-    // Lambda for validating an equation with any combination of operators
-    let check_eq_concat = move |res: u64, numbers: &Vec<u64>| -> bool {
-        if numbers.len() == 0 {
-            return false;
-        }
-        if numbers.len() == 1 {
-            return res == numbers[0];
-        }
-        let mut ops = vec![Op::Add; numbers.len() - 1];
-        // Iterate through all possible combinations
-        let mut counters = vec![0u64; ops.len()];
-        const N_OPS: u64 = 3;
-        while counters[counters.len() - 1] < N_OPS {
-            if eval(&numbers, &ops) == res {
-                return true;
-            }
-            counters[0] += 1;
-            for c in 0..(counters.len() - 1) {
-                if counters[c] >= N_OPS {
-                    counters[c] = 0;
-                    counters[c + 1] += 1;
-                }
-            }
-            for (ind, &n) in counters.iter().enumerate() {
-                ops[ind] = match n {
-                    0 => Op::Add,
-                    1 => Op::Mul,
-                    2 => Op::Concat,
-                    _ => Op::Add,
-                };
-            }
-        }
-        false
-    };
     // Compute the sum of all valid equation results
     let mut sum = 0u64;
     for (res, numbers) in eqs.iter() {
-        if check_eq_concat(*res, numbers) {
+        if check_eq(*res, numbers, 3) {
             sum += res;
         }
     }
