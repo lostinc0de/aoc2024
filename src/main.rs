@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -626,7 +626,9 @@ fn seven(filename: &String) {
         let s = line.split(':').collect::<Vec<&str>>();
         if s.len() == 2 {
             let res = u64::from_str(s[0]).unwrap();
-            let numbers = s[1].split(' ').filter(|x| x.len() > 0)
+            let numbers = s[1]
+                .split(' ')
+                .filter(|x| x.len() > 0)
                 .map(|x| u64::from_str(x).unwrap())
                 .collect::<Vec<u64>>();
             eqs.push((res, numbers));
@@ -645,7 +647,7 @@ fn seven(filename: &String) {
                 0 => Op::Add,
                 1 => Op::Mul,
                 2 => Op::Concat,
-                _ => Op::Add
+                _ => Op::Add,
             }
         }
     }
@@ -654,10 +656,14 @@ fn seven(filename: &String) {
         let mut ret = numbers[0];
         for (ind, &c) in counters.iter().enumerate() {
             match Op::from_u8(c) {
-                Op::Add => { ret += numbers[ind + 1]; },
-                Op::Mul => { ret *= numbers[ind + 1]; },
+                Op::Add => {
+                    ret += numbers[ind + 1];
+                }
+                Op::Mul => {
+                    ret *= numbers[ind + 1];
+                }
                 // Added for part two
-                Op::Concat => { 
+                Op::Concat => {
                     let num_str = numbers[ind + 1].to_string();
                     let ret_str = ret.to_string() + &num_str;
                     ret = u64::from_str(&ret_str).unwrap();
@@ -706,7 +712,103 @@ fn seven(filename: &String) {
             sum += res;
         }
     }
-    println!("Sum of valid equations with concat operator || results = {:?}", sum);
+    println!(
+        "Sum of valid equations with concat operator || results = {:?}",
+        sum
+    );
+}
+
+fn eight(filename: &String) {
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    // Part one: Create map of antennas and find all anti nodes
+    let mut map = vec![];
+    for line in reader.lines().map(|l| l.unwrap()) {
+        let row = line
+            .chars()
+            .filter(|&c| c == '.' || c.is_alphanumeric())
+            .collect::<Vec<char>>();
+        map.push(row);
+    }
+    // Store the positions in a hash map
+    let mut positions = HashMap::<char, Vec<(isize, isize)>>::new();
+    for (i, row) in map.iter().enumerate() {
+        for (j, c) in row.iter().enumerate() {
+            if c.is_alphanumeric() {
+                match positions.get_mut(c) {
+                    Some(entries) => {
+                        entries.push((i as isize, j as isize));
+                    },
+                    None => {
+                        positions.insert(*c, vec![(i as isize, j as isize)]);
+                    }
+                }
+            }
+        }
+    }
+    // Lambda to check if a node position is valid or out of bounds
+    let valid_node = move |pos: (isize, isize), bounds: (isize, isize)| -> bool {
+        let (n_rows, n_cols) = bounds;
+        let (row, col) = pos;
+        if row >= 0 && row < n_rows
+             && col >= 0 && col < n_cols {
+            return true;
+        }
+        false
+    };
+    let bounds = (map.len() as isize, map[0].len() as isize);
+    let mut positions_antinode = HashSet::<(isize, isize)>::new();
+    for freq in positions.keys() {
+        let ant = &positions[freq];
+        for i in 0..ant.len() {
+            let (row_i, col_i) = ant[i];
+            for j in (i + 1)..ant.len() {
+                let (row_j, col_j) = ant[j];
+                // Compute the direction vector from node i to j
+                let (row_dir, col_dir) = (row_j - row_i, col_j - col_i);
+                // Add the direction vector to node j
+                let node = (row_j + row_dir, col_j + col_dir);
+                if valid_node(node, bounds) {
+                    positions_antinode.insert(node);
+                }
+                // Subtract the direction vector from node i
+                let node = (row_i - row_dir, col_i - col_dir);
+                if valid_node(node, bounds) {
+                    positions_antinode.insert(node);
+                }
+            }
+        }
+    }
+    println!("Number of distinct antinodes = {}", positions_antinode.len());
+    // Part two: Take harmonics into account
+    let mut positions_antinode = HashSet::<(isize, isize)>::new();
+    for freq in positions.keys() {
+        let ant = &positions[freq];
+        for i in 0..ant.len() {
+            let (row_i, col_i) = ant[i];
+            for j in (i + 1)..ant.len() {
+                let (row_j, col_j) = ant[j];
+                // Compute the direction vector from node i to j
+                let (row_dir, col_dir) = (row_j - row_i, col_j - col_i);
+                // Add the direction vector to node j
+                let mut node = (row_j + row_dir, col_j + col_dir);
+                while valid_node(node, bounds) {
+                    positions_antinode.insert(node);
+                    node = (node.0 + row_dir, node.1 + col_dir);
+                }
+                // Subtract the direction vector from node i
+                let mut node = (row_i - row_dir, col_i - col_dir);
+                while valid_node(node, bounds) {
+                    positions_antinode.insert(node);
+                    node = (node.0 - row_dir, node.1 - col_dir);
+                }
+                // Insert positions of antennae as well
+                positions_antinode.insert(ant[i]);
+                positions_antinode.insert(ant[j]);
+            }
+        }
+    }
+    println!("Number of distinct antinodes with harmonics = {}", positions_antinode.len());
 }
 
 fn main() {
@@ -736,6 +838,9 @@ fn main() {
             }
             7 => {
                 seven(filename);
+            }
+            8 => {
+                eight(filename);
             }
             _ => println!("Unknown day {}", day),
         }
