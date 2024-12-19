@@ -811,6 +811,118 @@ fn eight(filename: &String) {
     println!("Number of distinct antinodes with harmonics = {}", positions_antinode.len());
 }
 
+fn nine(filename: &String) {
+    let mut file = File::open(filename.as_str()).unwrap();
+    // Part one: Read fragmented file system structure
+    let mut disk_map = String::new();
+    file.read_to_string(&mut disk_map).unwrap();
+    // First byte is the number of blocks of the current file
+    // and the second byte the number of free blocks to the next file
+    const EMPTY: i32 = -1;
+    let decode = move |disk: &String| -> Vec<i32> {
+        let mut map_dec = vec![];
+        // Decode the disk map
+        let map_chunks = disk.as_bytes().chunks_exact(2);
+        for (id, chunk) in map_chunks.enumerate() {
+            let id_file = id as i32;
+            let (b_file, b_free) = (chunk[0], chunk[1]);
+            let n_blocks_file = b_file - b'0';
+            if n_blocks_file > 0 && n_blocks_file <= 9 {
+                let mut block = vec![id_file; n_blocks_file as usize];
+                map_dec.append(&mut block);
+            }
+            let n_blocks_free = b_free - b'0';
+            if n_blocks_free > 0 && n_blocks_free <= 9 {
+                let mut block = vec![EMPTY; n_blocks_free as usize];
+                map_dec.append(&mut block);
+            }
+        }
+        map_dec
+    };
+    // Defragment the map
+    let defrag = move |map: &mut Vec<i32>| {
+        let mut pos_file = map.len() - 1;
+        let mut pos_free = 0;
+        loop {
+            while pos_file > 0 && map[pos_file] == EMPTY {
+                pos_file -= 1;
+            }
+            while pos_free < map.len() && map[pos_free] != EMPTY {
+                pos_free += 1;
+            }
+            if pos_file <= pos_free {
+                break;
+            }
+            map.swap(pos_file, pos_free);
+        }
+    };
+    // Lambda for computing the checksum
+    let chksum = move |map: &Vec<i32>| -> u64 {
+        let mut sum = 0;
+        for (pos, &id) in map.iter().enumerate() {
+            if id != EMPTY {
+                sum += (pos as u64) * id as u64;
+            }
+        }
+        sum
+    };
+    let mut map_dec = decode(&disk_map);
+    defrag(&mut map_dec);
+    println!("Check sum = {}", chksum(&map_dec));
+    // Part two: Shift files to a suitable place on the left side
+    // Lambda for finding a free position
+    let find_free_pos = move |map: &Vec<i32>, len: usize| -> Option<usize> {
+        let mut len_free = 0;
+        for (pos, &val) in map.iter().enumerate() {
+            if val == EMPTY {
+                len_free += 1;
+            } else {
+                len_free = 0;
+            }
+            if len_free >= len {
+                //println!("pos {} len free {}", pos, len_free);
+                return Some(pos + 1 - len_free);
+            }
+        }
+        None
+    };
+    // Lambda for shifting the file blocks to the left
+    let shift_files = move |map: &mut Vec<i32>| {
+        let mut pos_file = map.len() - 1;
+        loop {
+            // Skip empty blocks
+            while pos_file > 0 && map[pos_file] == EMPTY {
+                pos_file -= 1;
+            }
+            // Abort if we are on the left side
+            if pos_file == 0 {
+                break;
+            }
+            // Get the length of the current file block
+            let id_file = map[pos_file];
+            let mut len = 0;
+            while pos_file > 0 && map[pos_file] == id_file {
+                pos_file -= 1;
+                len += 1;
+            }
+            // Find a free position for the file
+            if let Some(pos_free) = find_free_pos(&map, len) {
+                // The actual starting block of the file is plus one
+                pos_file += 1;
+                if pos_free < pos_file {
+                    for i in 0..len {
+                        map.swap(pos_free + i, pos_file + i);
+                    }
+                }
+            }
+            pos_file -= 1;
+        }
+    };
+    let mut map_dec = decode(&disk_map);
+    shift_files(&mut map_dec);
+    println!("Check sum with preprocessing = {}", chksum(&map_dec));
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -841,6 +953,9 @@ fn main() {
             }
             8 => {
                 eight(filename);
+            }
+            9 => {
+                nine(filename);
             }
             _ => println!("Unknown day {}", day),
         }
