@@ -1,4 +1,4 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -738,7 +738,7 @@ fn eight(filename: &String) {
                 match positions.get_mut(c) {
                     Some(entries) => {
                         entries.push((i as isize, j as isize));
-                    },
+                    }
                     None => {
                         positions.insert(*c, vec![(i as isize, j as isize)]);
                     }
@@ -750,8 +750,7 @@ fn eight(filename: &String) {
     let valid_node = move |pos: (isize, isize), bounds: (isize, isize)| -> bool {
         let (n_rows, n_cols) = bounds;
         let (row, col) = pos;
-        if row >= 0 && row < n_rows
-             && col >= 0 && col < n_cols {
+        if row >= 0 && row < n_rows && col >= 0 && col < n_cols {
             return true;
         }
         false
@@ -779,7 +778,10 @@ fn eight(filename: &String) {
             }
         }
     }
-    println!("Number of distinct antinodes = {}", positions_antinode.len());
+    println!(
+        "Number of distinct antinodes = {}",
+        positions_antinode.len()
+    );
     // Part two: Take harmonics into account
     let mut positions_antinode = HashSet::<(isize, isize)>::new();
     for freq in positions.keys() {
@@ -808,7 +810,10 @@ fn eight(filename: &String) {
             }
         }
     }
-    println!("Number of distinct antinodes with harmonics = {}", positions_antinode.len());
+    println!(
+        "Number of distinct antinodes with harmonics = {}",
+        positions_antinode.len()
+    );
 }
 
 fn nine(filename: &String) {
@@ -923,6 +928,144 @@ fn nine(filename: &String) {
     println!("Check sum with preprocessing = {}", chksum(&map_dec));
 }
 
+fn ten(filename: &String) {
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    let mut map = vec![];
+    for line in reader.lines().map(|l| l.unwrap()) {
+        map.push(
+            line.chars()
+                .map(|c| {
+                    if c.is_numeric() {
+                        c as u8 - b'0'
+                    } else {
+                        255u8
+                    }
+                })
+                .collect::<Vec<u8>>(),
+        );
+    }
+    #[derive(Debug, Copy, Clone, PartialEq)]
+    enum Dir {
+        Left,
+        Right,
+        Up,
+        Down,
+    }
+    // Find all trailheads
+    let mut trailheads = vec![];
+    for (row, r) in map.iter().enumerate() {
+        for (col, b) in r.iter().enumerate() {
+            if *b == 0 {
+                trailheads.push((row, col));
+            }
+        }
+    }
+    // Lambda for determining the next position on the map in direction dir
+    let next_pos =
+        move |map: &Vec<Vec<u8>>, pos: (usize, usize), dir: Dir| -> Option<(usize, usize)> {
+            let (n_rows, n_cols) = (map.len(), map[0].len());
+            let (row, col) = pos;
+            match dir {
+                Dir::Left => {
+                    if col > 0 {
+                        return Some((row, col - 1));
+                    }
+                }
+                Dir::Right => {
+                    if col < (n_cols - 1) {
+                        return Some((row, col + 1));
+                    }
+                }
+                Dir::Up => {
+                    if row > 0 {
+                        return Some((row - 1, col));
+                    }
+                }
+                Dir::Down => {
+                    if row < (n_rows - 1) {
+                        return Some((row + 1, col));
+                    }
+                }
+            }
+            None
+        };
+    // Lambda to check, if the next step is valid
+    let valid_step =
+        move |map: &Vec<Vec<u8>>, pos: (usize, usize), dir: Dir| -> Option<(usize, usize)> {
+            let (row, col) = pos;
+            let val = map[row][col];
+            if let Some(pos_new) = next_pos(map, pos, dir) {
+                let (row_new, col_new) = pos_new;
+                let val_new = map[row_new][col_new];
+                // Only ascending values
+                if val_new == (val + 1) {
+                    //println!(
+                    //    "pos {:?} val {} pos_new {:?} val_new {}",
+                    //    pos, val, pos_new, val_new
+                    //);
+                    return Some(pos_new);
+                }
+            }
+            None
+        };
+    // Lambda for determining possible paths
+    let find_paths = move |map: &Vec<Vec<u8>>, trailhead: (usize, usize)| -> (u64, u64) {
+        const DIRS: [Dir; 4] = [Dir::Left, Dir::Right, Dir::Up, Dir::Down];
+        let mut paths = vec![vec![trailhead]];
+        // Only the individual reachable destinations count, not every path
+        let mut reachable_dest = HashSet::<(usize, usize)>::new();
+        // Part two: Count individual paths (accidentally done before)
+        let mut n_valid_paths = 0u64;
+        while let Some(mut path) = paths.pop() {
+            loop {
+                let pos = path[path.len() - 1];
+                if path.len() == 10 {
+                    reachable_dest.insert(pos);
+                    n_valid_paths += 1;
+                    break;
+                }
+                // Count the number of possible directions for the next move
+                let mut count = 0;
+                for &dir in DIRS.iter() {
+                    if let Some(pos_new) = valid_step(&map, pos, dir) {
+                        if count > 0 {
+                            // We found a new path since the current path
+                            // has a new position already
+                            let mut path_new = path.clone();
+                            // Exchange the last position
+                            path_new[path.len() - 1] = pos_new;
+                            paths.push(path_new);
+                        } else {
+                            // Process current path
+                            path.push(pos_new);
+                        }
+                        count += 1;
+                    }
+                }
+                // Abort if no possible path in any direction could be found
+                if count == 0 {
+                    break;
+                }
+            }
+        }
+        (reachable_dest.len() as u64, n_valid_paths)
+    };
+    let mut sum = 0;
+    for &trailhead in trailheads.iter() {
+        let (n_reachable_dest, _) = find_paths(&map, trailhead);
+        sum += n_reachable_dest;
+    }
+    println!("Sum of hiking paths = {}", sum);
+    // Part two: Count individual paths
+    let mut sum = 0;
+    for &trailhead in trailheads.iter() {
+        let (_, n_paths_valid) = find_paths(&map, trailhead);
+        sum += n_paths_valid;
+    }
+    println!("Sum of individual hiking paths = {}", sum);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -957,9 +1100,12 @@ fn main() {
             9 => {
                 nine(filename);
             }
+            10 => {
+                ten(filename);
+            }
             _ => println!("Unknown day {}", day),
         }
     } else {
-        println!("At least two arguments required");
+        println!("At least two arguments required: Day and input filename");
     }
 }
