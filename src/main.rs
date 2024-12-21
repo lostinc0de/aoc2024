@@ -1066,6 +1066,80 @@ fn ten(filename: &String) {
     println!("Sum of individual hiking paths = {}", sum);
 }
 
+fn eleven(filename: &String) {
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    let mut stones = vec![];
+    for line in reader.lines().map(|l| l.unwrap()) {
+        let stones_line = line.split_whitespace().map(|x| u64::from_str(x).unwrap());
+        stones.extend(stones_line);
+    }
+    // Lambda for one blink splitting the stones
+    let blink = move |stones: &mut Vec<u64>| {
+        let mut stones_add = vec![];
+        for stone in stones.iter_mut() {
+            if *stone == 0 {
+                *stone = 1;
+            } else {
+                let stone_str = stone.to_string();
+                if stone_str.len() % 2 == 0 {
+                    // Split the stone
+                    let half = stone_str.len() / 2;
+                    let (s0, s1) = stone_str.split_at(half);
+                    *stone = u64::from_str(s0).unwrap();
+                    stones_add.push(u64::from_str(s1).unwrap());
+                } else {
+                    *stone *= 2024;
+                }
+            }
+        }
+        stones.extend(&stones_add);
+    };
+    // Part one: Blink 25 times
+    let n_blinks = 25;
+    for _i in 0..n_blinks {
+        blink(&mut stones);
+    }
+    println!("Number of stones after 25 blinks {}", stones.len());
+    // Part two: Blink 75 times
+    // Use a hashmap since lots of values are recurring
+    let blink_map = move |stones_map: &mut HashMap<u64, u64>| {
+        let mut ret = HashMap::<u64, u64>::new();
+        for (&stone, &count) in stones_map.iter() {
+            if stone == 0 {
+                ret.entry(1).and_modify(|c| *c += count).or_insert(count);
+            } else {
+                let stone_str = stone.to_string();
+                if stone_str.len() % 2 == 0 {
+                    // Split the stone
+                    let half = stone_str.len() / 2;
+                    let (s0, s1) = stone_str.split_at(half);
+                    let s0 = u64::from_str(s0).unwrap();
+                    let s1 = u64::from_str(s1).unwrap();
+                    ret.entry(s0).and_modify(|c| *c += count).or_insert(count);
+                    ret.entry(s1).and_modify(|c| *c += count).or_insert(count);
+                } else {
+                    ret.entry(stone * 2024)
+                        .and_modify(|c| *c += count)
+                        .or_insert(count);
+                }
+            }
+        }
+        *stones_map = ret;
+    };
+    let mut stones_map = HashMap::<u64, u64>::new();
+    for s in stones.iter() {
+        stones_map.entry(*s).and_modify(|c| *c += 1).or_insert(1);
+    }
+    // Blink another 50 times
+    let n_blinks = 50;
+    for _i in 0..n_blinks {
+        blink_map(&mut stones_map);
+    }
+    let sum = stones_map.values().sum::<u64>();
+    println!("Number of stones after 75 blinks {}", sum);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -1102,6 +1176,9 @@ fn main() {
             }
             10 => {
                 ten(filename);
+            }
+            11 => {
+                eleven(filename);
             }
             _ => println!("Unknown day {}", day),
         }
