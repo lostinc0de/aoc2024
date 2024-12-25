@@ -1140,6 +1140,177 @@ fn eleven(filename: &String) {
     println!("Number of stones after 75 blinks {}", sum);
 }
 
+fn twelve(filename: &String) {
+    let file = File::open(filename.as_str()).unwrap();
+    let reader = BufReader::new(file);
+    let mut garden_map = vec![];
+    for line in reader.lines().map(|l| l.unwrap()) {
+        let garden_line = line.chars().collect::<Vec<char>>();
+        garden_map.push(garden_line);
+    }
+    #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+    enum Dir {
+        Left,
+        Right,
+        Up,
+        Down,
+    }
+    // Lambda for determining the next position in direction dir
+    let next_pos =
+        move |map: &Vec<Vec<char>>, pos: (usize, usize), dir: Dir| -> Option<(usize, usize)> {
+            let (row, col) = pos;
+            match dir {
+                Dir::Left => {
+                    if col > 0 {
+                        return Some((row, col - 1));
+                    }
+                }
+                Dir::Right => {
+                    if col < (map[0].len() - 1) {
+                        return Some((row, col + 1));
+                    }
+                }
+                Dir::Up => {
+                    if row > 0 {
+                        return Some((row - 1, col));
+                    }
+                }
+                Dir::Down => {
+                    if row < (map.len() - 1) {
+                        return Some((row + 1, col));
+                    }
+                }
+            }
+            None
+        };
+    // Lambda for checking, if neighboured field belongs to the same region
+    let same_region =
+        move |map: &Vec<Vec<char>>, pos: (usize, usize), dir: Dir| -> Option<(usize, usize)> {
+            let (row, col) = pos;
+            match next_pos(map, pos, dir) {
+                Some((row_next, col_next)) => {
+                    if map[row][col] == map[row_next][col_next] {
+                        return Some((row_next, col_next));
+                    }
+                }
+                _ => {}
+            }
+            None
+        };
+    // Lambda for computing the perimeter of a region
+    let comp_perimeter = move |map: &Vec<Vec<char>>, fields: &Vec<(usize, usize)>| -> u64 {
+        const DIRS: [Dir; 4] = [Dir::Left, Dir::Right, Dir::Up, Dir::Down];
+        let mut sum_peri = 0;
+        for &pos in fields.iter() {
+            // The perimeter of a field equals 4 - the number of neighbours
+            let mut n_neighbours = 0;
+            for &dir in DIRS.iter() {
+                if let Some(_) = same_region(map, pos, dir) {
+                    n_neighbours += 1;
+                }
+            }
+            sum_peri += 4 - n_neighbours;
+        }
+        sum_peri
+    };
+    // Store the region IDs for each position on the map
+    let mut pos_region = vec![vec![None; garden_map[0].len()]; garden_map.len()];
+    // Store the positions for each region in a vec
+    let mut region_pos = vec![];
+    const DIRS: [Dir; 4] = [Dir::Left, Dir::Right, Dir::Up, Dir::Down];
+    for (row, r) in garden_map.iter().enumerate() {
+        for (col, _) in r.iter().enumerate() {
+            let pos = (row, col);
+            // Check if current field already belongs to a region
+            if pos_region[row][col] == None {
+                // Add a new region
+                let region_id = region_pos.len();
+                pos_region[row][col] = Some(region_id);
+                region_pos.push(vec![pos]);
+                let mut neighbours = vec![pos];
+                // Find all neighbour belonging to the same region
+                while let Some(pos_next) = neighbours.pop() {
+                    for &dir in DIRS.iter() {
+                        if let Some(pos_neigh) = same_region(&garden_map, pos_next, dir) {
+                            let (row_neigh, col_neigh) = pos_neigh;
+                            if pos_region[row_neigh][col_neigh] == None {
+                                let (row_neigh, col_neigh) = pos_neigh;
+                                pos_region[row_neigh][col_neigh] = Some(region_id);
+                                region_pos[region_id].push(pos_neigh);
+                                neighbours.push(pos_neigh);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Finally compute the price
+    let mut price = 0;
+    for fields in region_pos.iter() {
+        let peri = comp_perimeter(&garden_map, fields);
+        let area = fields.len() as u64;
+        price += peri * area;
+    }
+    println!("Price = {}", price);
+    // Part two: Compute price using the number of sides instead of the area
+    let mut price = 0;
+    for fields in region_pos.iter() {
+        let area = fields.len() as u64;
+        let n_sides = {
+            // Complementary directions
+            const DIRS_COMPL: [[Dir; 2]; 4] = [
+                [Dir::Up, Dir::Down],
+                [Dir::Up, Dir::Down],
+                [Dir::Left, Dir::Right],
+                [Dir::Left, Dir::Right],
+            ];
+            // Store the side index for a field in a specific direction in a hash map
+            let mut pos_sides = HashSet::<(Dir, (usize, usize))>::new();
+            let mut n_sides = 0;
+            for &pos in fields.iter() {
+                for (ind, &dir) in DIRS.iter().enumerate() {
+                    // Check if the field already belongs to a side in this direction
+                    if pos_sides.get(&(dir, pos)) == None
+                        && same_region(&garden_map, pos, dir) == None
+                    {
+                        n_sides += 1;
+                        // Now check all the neighbours in the complementary directions
+                        // if they belong to the same side
+                        for &dir_compl in DIRS_COMPL[ind].iter() {
+                            let mut pos_next = pos;
+                            loop {
+                                // Check if this field lies on a boundary
+                                match same_region(&garden_map, pos_next, dir) {
+                                    None => {
+                                        // Mark the field as used in this direction
+                                        pos_sides.insert((dir, pos_next));
+                                    }
+                                    _ => {
+                                        break;
+                                    }
+                                }
+                                // Check if there is a neighboured field in this region
+                                match same_region(&garden_map, pos_next, dir_compl) {
+                                    Some(pos_neigh) => {
+                                        pos_next = pos_neigh;
+                                    }
+                                    None => {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            n_sides
+        };
+        price += n_sides * area;
+    }
+    println!("Price using sides = {}", price);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -1179,6 +1350,9 @@ fn main() {
             }
             11 => {
                 eleven(filename);
+            }
+            12 => {
+                twelve(filename);
             }
             _ => println!("Unknown day {}", day),
         }
